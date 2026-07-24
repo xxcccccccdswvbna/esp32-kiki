@@ -1,4 +1,4 @@
-name: Build & Release ESPHome Firmware
+name: Build & Release
 
 on:
   push:
@@ -11,20 +11,18 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号 (留空自动生成日期版本)'
+        description: '版本号 (留空自动生成)'
         required: false
         default: ''
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
     outputs:
       version: ${{ steps.version.outputs.version }}
     
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -35,7 +33,6 @@ jobs:
             VERSION="${{ github.event.inputs.version }}"
           else
             DATE=$(date +'%Y.%m.%d')
-            # 获取当天构建次数
             BUILD_NUM=$(git tag --list "v${DATE}-*" | wc -l)
             BUILD_NUM=$((BUILD_NUM + 1))
             VERSION="v${DATE}-${BUILD_NUM}"
@@ -43,76 +40,54 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install ESPHome
-        run: pip install esphome
+      - run: pip install esphome
 
       - name: Create secrets
         run: |
           cat > secrets.yaml << 'EOF'
           wifi_ssid: "CC"
           wifi_password: "chen1122"
-          api_key: "dummy_key_for_build"
+          api_key: "dummy"
           mqtt_broker: "192.168.6.88"
           mqtt_user: ""
           mqtt_pass: ""
           EOF
 
-      - name: Build firmware
+      - name: Generate version.h
+        run: |
+          cat > version.h << EOF
+          #pragma once
+          #define FIRMWARE_VERSION "${{ steps.version.outputs.version }}"
+          #define FIRMWARE_BUILD_DATE "$(date +%Y-%m-%d)"
+          #define FIRMWARE_GIT_COMMIT "${{ github.sha }}"
+          EOF
+
+      - name: Build
         run: |
           esphome compile ct1.yaml
-          
           BUILD_DIR=$(find .esphome/build -name "ct1" -type d | head -1)
-          echo "Build dir: $BUILD_DIR"
-          
           mkdir -p dist
           find "$BUILD_DIR" -name "*.bin" -exec cp {} dist/ \;
-          
-          # 生成文件清单
-          echo "### 固件文件" > dist/RELEASE_NOTES.md
-          echo "版本: ${{ steps.version.outputs.version }}" >> dist/RELEASE_NOTES.md
-          echo "构建时间: $(date '+%Y-%m-%d %H:%M:%S')" >> dist/RELEASE_NOTES.md
-          echo "提交: ${{ github.sha }}" >> dist/RELEASE_NOTES.md
-          echo "" >> dist/RELEASE_NOTES.md
-          echo "| 文件 | 大小 | 用途 |" >> dist/RELEASE_NOTES.md
-          echo "|------|------|------|" >> dist/RELEASE_NOTES.md
-          
-          for f in dist/*.bin; do
-            fname=$(basename "$f")
-            fsize=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f")
-            fsize_kb=$((fsize / 1024))
-            
-            case "$fname" in
-              *bootloader*) purpose="引导加载程序 (首次烧录)" ;;
-              *partition*) purpose="分区表 (首次烧录)" ;;
-              *ota_data*) purpose="OTA 初始数据 (首次烧录)" ;;
-              *) purpose="主固件 (OTA 升级用此文件)" ;;
-            esac
-            
-            echo "| $fname | ${fsize_kb}KB | $purpose |" >> dist/RELEASE_NOTES.md
-          done
-          
+          echo "### CT1 BLE Gateway ${{ steps.version.outputs.version }}" > dist/RELEASE.md
+          echo "Build: $(date '+%Y-%m-%d %H:%M:%S')" >> dist/RELEASE.md
+          echo "Commit: ${{ github.sha }}" >> dist/RELEASE.md
           ls -la dist/
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: ct1-firmware-${{ steps.version.outputs.version }}
+          name: ct1-${{ steps.version.outputs.version }}
           path: dist/*
           retention-days: 90
 
-      - name: Create/Update Release
-        uses: softprops/action-gh-release@v1
+      - uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.version.outputs.version }}
-          name: "CT1 BLE Gateway ${{ steps.version.outputs.version }}"
-          body_path: dist/RELEASE_NOTES.md
+          name: "CT1 ${{ steps.version.outputs.version }}"
+          body_path: dist/RELEASE.md
           files: dist/*.bin
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
