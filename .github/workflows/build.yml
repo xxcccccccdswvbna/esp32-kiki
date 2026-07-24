@@ -71,7 +71,7 @@ jobs:
           esphome compile ct1.yaml
           BUILD_DIR=$(find .esphome/build -name "ct1" -type d | head -1)
           mkdir -p dist
-          find "$BUILD_DIR" -name "*.bin" -exec cp {} dist/ \;
+          find "$BUILD_DIR" -name "*.bin" -exec cp {} dist/ \
           echo "### CT1 BLE Gateway ${{ steps.version.outputs.version }}" > dist/RELEASE.md
           echo "Build: $(date '+%Y-%m-%d %H:%M:%S')" >> dist/RELEASE.md
           echo "Commit: ${{ github.sha }}" >> dist/RELEASE.md
