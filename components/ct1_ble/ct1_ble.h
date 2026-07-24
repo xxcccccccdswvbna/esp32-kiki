@@ -7,7 +7,6 @@
 namespace ct1_ble {
 
 class CT1BLE : public Component,
-               public mqtt::MQTTDevice,
                public esp32_ble_tracker::ESPBTDeviceListener {
 public:
     void setup() override {
@@ -34,12 +33,15 @@ public:
             });
         }
         
-        // MQTT 订阅
-        for (auto& dev : devices_) {
-            std::string topic = "ct1/" + dev.id + "/set";
-            this->subscribe(topic, [this, dev_id = dev.id](const std::string& payload) {
-                this->on_mqtt_structured(dev_id, payload);
-            });
+        // MQTT 订阅（通过全局客户端）
+        auto mqtt_client = mqtt::global_mqtt_client;
+        if (mqtt_client != nullptr) {
+            for (auto& dev : devices_) {
+                std::string topic = "ct1/" + dev.id + "/set";
+                mqtt_client->subscribe(topic, [this, dev_id = dev.id](const std::string& payload) {
+                    this->on_mqtt_structured(dev_id, payload);
+                });
+            }
         }
         
         state_ = IDLE;
@@ -218,7 +220,10 @@ private:
         json += "\"fan_dir\":\"" + dev.state_fan_dir + "\"";
         json += "}";
         
-        this->publish("ct1/" + dev.id + "/state", json);
+        auto mqtt_client = mqtt::global_mqtt_client;
+        if (mqtt_client != nullptr) {
+            mqtt_client->publish("ct1/" + dev.id + "/state", json);
+        }
     }
 
     FanLight* find_dev(const std::string& id) {
