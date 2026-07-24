@@ -3,8 +3,6 @@ esphome:
   friendly_name: CT1 BLE Gateway
   includes:
     - version.h
-    - fan_light.h
-    - ble_gateway.h
 
 esp32:
   board: esp32dev
@@ -49,8 +47,12 @@ esp32_ble_tracker:
     window: 1100ms
     active: false
 
-custom_component:
-  - id: ct1_ble
-    lambda: |-
-      auto gw = new BLEGateway();
-      return {gw};
+# ===== 外部组件（替代 custom_component）=====
+external_components:
+  - source:
+      type: local
+      path: components
+
+# ===== 使用组件 =====
+ct1_ble:
+  id: ct1_ble
